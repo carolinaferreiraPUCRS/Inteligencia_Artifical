@@ -11,7 +11,7 @@ import pandas as pd
 # Foi criado apartir do algoritmo de geração e vericação de tabuleiros algumas vitorias de X e O, para ter mais diversidade no nosso dataset. E juntando todos os dados utilizamos o NearMiss para balancear os dados.
 
 
-data = pd.read_csv('./data/para-criar-dados.data', header=None)
+data = pd.read_csv('./data/dados_finais_300.csv', header=None)
 X = data.iloc[:, :9]
 Y = data.iloc[:, 9]
 

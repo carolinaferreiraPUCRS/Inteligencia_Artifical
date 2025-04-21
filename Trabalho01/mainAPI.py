@@ -11,14 +11,14 @@ MODELOS = {
     "arvore": "modelos/arvore.pkl",
     "mlp": "modelos/mlp.pkl",
     "knn": "modelos/knn.pkl",
-    "outro": "modelos/outro.pkl"
+    "svm": "modelos/svm.pkl"
 }
 
 modelos_carregados = {}
 
 class RequisicaoEntrada(BaseModel):
     estado: list[int]  # 9 valores do tabuleiro
-    algoritmo: str     # "arvore", "mlp", "knn", "outro"
+    algoritmo: str     # "arvore", "mlp", "knn", "svm"
 
 @app.post("/prever/")
 def prever_estado_jogo(requisicao: RequisicaoEntrada):

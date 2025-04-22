@@ -3,22 +3,32 @@ from pydantic import BaseModel
 import joblib
 import numpy as np
 import os
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="API IA - Jogo da Velha com múltiplos algoritmos")
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Caminhos dos modelos
 MODELOS = {
     "arvore": "modelos/arvore.pkl",
     "mlp": "modelos/mlp.pkl",
     "knn": "modelos/knn.pkl",
-    "outro": "modelos/outro.pkl"
+    "svm": "modelos/svm.pkl"
 }
 
 modelos_carregados = {}
 
 class RequisicaoEntrada(BaseModel):
     estado: list[int]  # 9 valores do tabuleiro
-    algoritmo: str     # "arvore", "mlp", "knn", "outro"
+    algoritmo: str     # "arvore", "mlp", "knn", "svm"
 
 @app.post("/prever/")
 def prever_estado_jogo(requisicao: RequisicaoEntrada):

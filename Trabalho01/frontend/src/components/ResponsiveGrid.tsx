@@ -53,6 +53,7 @@ const Item = styled(Paper)<{ player: "X" | "O" | null }>(({ player }) => ({
 export default function ResponsiveGrid() {
 	const [estadoPrevisto, setEstadoPrevisto] = useState<string | null>(null);
 	const [isXNext, setIsXNext] = useState(true);
+	const [iaErrouUltima, setIaErrouUltima] = useState<boolean | null>(null);
 	const [squares, setSquares] = useState<SquareState[]>(
 		Array(9)
 			.fill(null)
@@ -78,14 +79,23 @@ export default function ResponsiveGrid() {
 
 	const verificarVitoria = (squares: SquareState[]): "X" | "O" | null => {
 		const linhas = [
-			[0, 1, 2], [3, 4, 5], [6, 7, 8], // horizontais
-			[0, 3, 6], [1, 4, 7], [2, 5, 8], // verticais
-			[0, 4, 8], [2, 4, 6] // diagonais
+			[0, 1, 2],
+			[3, 4, 5],
+			[6, 7, 8], // horizontais
+			[0, 3, 6],
+			[1, 4, 7],
+			[2, 5, 8], // verticais
+			[0, 4, 8],
+			[2, 4, 6], // diagonais
 		];
 
 		for (const linha of linhas) {
 			const [a, b, c] = linha;
-			if (squares[a].value && squares[a].value === squares[b].value && squares[a].value === squares[c].value) {
+			if (
+				squares[a].value &&
+				squares[a].value === squares[b].value &&
+				squares[a].value === squares[c].value
+			) {
 				return squares[a].value;
 			}
 		}
@@ -93,7 +103,7 @@ export default function ResponsiveGrid() {
 	};
 
 	const verificarEmpate = (squares: SquareState[]): boolean => {
-		return squares.every(square => square.value !== null);
+		return squares.every((square) => square.value !== null);
 	};
 
 	const verificarEstadoReal = (squares: SquareState[]): string => {
@@ -103,40 +113,35 @@ export default function ResponsiveGrid() {
 		if (verificarEmpate(squares)) return "tie";
 		return "hasgame";
 	};
-	
 
-	const verificarEstadoDoJogo = async (estado: number[]) => {
+	const verificarEstadoDoJogo = async (estado: number[], estadoReal: string) => {
 		const resposta = await fetch("http://127.0.0.1:8000/prever/", {
 			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				estado,
-				algoritmo: algoritmo,
-			}),
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ estado, algoritmo }),
 		});
 		const dados = await resposta.json();
-		
-		// Atualiza as métricas
+
 		const novoTotal = gameMetrics.totalPredictions + 1;
-		const estadoReal = verificarEstadoReal(squares);
 		const isCorrect = dados.estado_previsto === estadoReal;
 
 		const novasMetricas = {
 			totalPredictions: novoTotal,
-			correctPredictions: isCorrect ? gameMetrics.correctPredictions + 1 : gameMetrics.correctPredictions,
-			incorrectPredictions: !isCorrect ? gameMetrics.incorrectPredictions + 1 : gameMetrics.incorrectPredictions,
-			accuracy: ((isCorrect ? gameMetrics.correctPredictions + 1 : gameMetrics.correctPredictions) / novoTotal) * 100
+			correctPredictions: isCorrect
+				? gameMetrics.correctPredictions + 1
+				: gameMetrics.correctPredictions,
+			incorrectPredictions: !isCorrect
+				? gameMetrics.incorrectPredictions + 1
+				: gameMetrics.incorrectPredictions,
+			accuracy:
+				((isCorrect
+					? gameMetrics.correctPredictions + 1
+					: gameMetrics.correctPredictions) /
+					novoTotal) *
+				100,
 		};
 
 		setGameMetrics(novasMetricas);
-
-		// Se a IA não detectou o fim do jogo corretamente, encerra o jogo
-		if (!isCorrect && (estadoReal === "vitoria_x" || estadoReal === "vitoria_o" || estadoReal === "empate")) {
-			setGameOver(true);
-		}
-
 		return dados.estado_previsto;
 	};
 
@@ -144,23 +149,23 @@ export default function ResponsiveGrid() {
 		if (squares[index].value || gameOver) return;
 
 		const newSquares = squares.map((square, i) => ({
-      value: i === index ? (isXNext ? "X" : "O") : square.value,
-    }));
-
-		setSquares(newSquares);
-		const estadoReal = verificarEstadoReal(newSquares);
-			if (estadoReal !== "hasgame") {
-				setGameOver(true);
-				return;
-			}
-
-		setIsXNext(!isXNext);
+			value: i === index ? (isXNext ? "X" : "O") : square.value,
+		}));
 
 		const estadoNumerico = formatTabuleiro(newSquares);
+		const estadoReal = verificarEstadoReal(newSquares);
 
-		verificarEstadoDoJogo(estadoNumerico).then((resultado) => {
+		verificarEstadoDoJogo(estadoNumerico, estadoReal).then((resultado) => {
 			setEstadoPrevisto(resultado);
+
+			if (estadoReal !== "hasgame") {
+				setGameOver(true);
+				setIaErrouUltima(resultado !== estadoReal); // true se errou, false se acertou
+			}
 		});
+
+		setSquares(newSquares);
+		setIsXNext(!isXNext);
 	};
 
 	const handleRestart = () => {
@@ -172,6 +177,7 @@ export default function ResponsiveGrid() {
 		setIsXNext(true);
 		setGameOver(false);
 		setEstadoPrevisto(null);
+		setIaErrouUltima(null);
 		setGameMetrics({
 			totalPredictions: 0,
 			correctPredictions: 0,
@@ -179,7 +185,7 @@ export default function ResponsiveGrid() {
 			accuracy: 0,
 		});
 	};
-	
+
 	return (
 		<Box display="flex" flexDirection="column" alignItems="center" gap="16px">
 			<Box display="flex" gap="16px" alignItems="center">
@@ -217,7 +223,7 @@ export default function ResponsiveGrid() {
 						Estado do jogo: {estadoPrevisto.toUpperCase()}
 					</Typography>
 				)}
-				
+
 				<Typography variant="body1">
 					Total de Previsões: {gameMetrics.totalPredictions}
 				</Typography>
@@ -232,9 +238,11 @@ export default function ResponsiveGrid() {
 				</Typography>
 			</Box>
 
-			{gameOver && (
-				<Typography variant="h6" color="error">
-					Jogo encerrado: A IA não detectou o fim do jogo corretamente!
+			{gameOver && iaErrouUltima !== null && (
+				<Typography variant="h6" color={iaErrouUltima ? "error" : "success"}>
+					{iaErrouUltima
+						? "Jogo encerrado: A IA não detectou o fim do jogo corretamente!"
+						: "Jogo encerrado: A IA previu corretamente o fim do jogo!"}
 				</Typography>
 			)}
 

@@ -1,17 +1,23 @@
-import { styled } from "@mui/material/styles";
-import Paper from "@mui/material/Paper";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import { useState } from "react";
 import FormControl from "@mui/material/FormControl";
 import InputLabel from "@mui/material/InputLabel";
-import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
-import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import Paper from "@mui/material/Paper";
+import Select from "@mui/material/Select";
+import { styled } from "@mui/material/styles";
+import Typography from "@mui/material/Typography";
+import { useState } from "react";
 
 interface SquareState {
 	value: "X" | "O" | null;
+}
+
+interface GameMetrics {
+	totalPredictions: number;
+	correctPredictions: number;
+	incorrectPredictions: number;
+	accuracy: number;
 }
 
 const Item = styled(Paper)<{ player: "X" | "O" | null }>(({ player }) => ({
@@ -46,13 +52,20 @@ const Item = styled(Paper)<{ player: "X" | "O" | null }>(({ player }) => ({
 
 export default function ResponsiveGrid() {
 	const [estadoPrevisto, setEstadoPrevisto] = useState<string | null>(null);
+	const [isXNext, setIsXNext] = useState(true);
 	const [squares, setSquares] = useState<SquareState[]>(
 		Array(9)
 			.fill(null)
 			.map(() => ({ value: null }))
 	);
 	const [algoritmo, setAlgoritmo] = useState<string>("arvore");
-	const [playerChoice, setPlayerChoice] = useState<"X" | "O">("X");
+	const [gameMetrics, setGameMetrics] = useState<GameMetrics>({
+		totalPredictions: 0,
+		correctPredictions: 0,
+		incorrectPredictions: 0,
+		accuracy: 0,
+	});
+	const [gameOver, setGameOver] = useState<boolean>(false);
 
 	console.log("Estado do jogo previsto:", estadoPrevisto);
 	const formatTabuleiro = (squares: SquareState[]) => {
@@ -62,6 +75,36 @@ export default function ResponsiveGrid() {
 			return -1;
 		});
 	};
+
+	const verificarVitoria = (squares: SquareState[]): "X" | "O" | null => {
+		const linhas = [
+			[0, 1, 2], [3, 4, 5], [6, 7, 8], // horizontais
+			[0, 3, 6], [1, 4, 7], [2, 5, 8], // verticais
+			[0, 4, 8], [2, 4, 6] // diagonais
+		];
+
+		for (const linha of linhas) {
+			const [a, b, c] = linha;
+			if (squares[a].value && squares[a].value === squares[b].value && squares[a].value === squares[c].value) {
+				return squares[a].value;
+			}
+		}
+		return null;
+	};
+
+	const verificarEmpate = (squares: SquareState[]): boolean => {
+		return squares.every(square => square.value !== null);
+	};
+
+	const verificarEstadoReal = (squares: SquareState[]): string => {
+		const vencedor = verificarVitoria(squares);
+		if (vencedor === "X") return "xwin";
+		if (vencedor === "O") return "owin";
+		if (verificarEmpate(squares)) return "tie";
+		return "hasgame";
+	};
+	
+
 	const verificarEstadoDoJogo = async (estado: number[]) => {
 		const resposta = await fetch("http://127.0.0.1:8000/prever/", {
 			method: "POST",
@@ -74,34 +117,49 @@ export default function ResponsiveGrid() {
 			}),
 		});
 		const dados = await resposta.json();
+		
+		// Atualiza as métricas
+		const novoTotal = gameMetrics.totalPredictions + 1;
+		const estadoReal = verificarEstadoReal(squares);
+		const isCorrect = dados.estado_previsto === estadoReal;
+
+		const novasMetricas = {
+			totalPredictions: novoTotal,
+			correctPredictions: isCorrect ? gameMetrics.correctPredictions + 1 : gameMetrics.correctPredictions,
+			incorrectPredictions: !isCorrect ? gameMetrics.incorrectPredictions + 1 : gameMetrics.incorrectPredictions,
+			accuracy: ((isCorrect ? gameMetrics.correctPredictions + 1 : gameMetrics.correctPredictions) / novoTotal) * 100
+		};
+
+		setGameMetrics(novasMetricas);
+
+		// Se a IA não detectou o fim do jogo corretamente, encerra o jogo
+		if (!isCorrect && (estadoReal === "vitoria_x" || estadoReal === "vitoria_o" || estadoReal === "empate")) {
+			setGameOver(true);
+		}
+
 		return dados.estado_previsto;
 	};
 
-	const handlePlayerChange = (
-		event: React.MouseEvent<HTMLElement>,
-		newChoice: "X" | "O"
-	) => {
-		if (newChoice !== null) {
-			setPlayerChoice(newChoice);
-		}
-	};
-
 	const handleClick = (index: number) => {
-		if (squares[index].value) return; // Se já foi clicado, não faz nada
+		if (squares[index].value || gameOver) return;
 
 		const newSquares = squares.map((square, i) => ({
-			value: i === index ? playerChoice : square.value,
-		}));
+      value: i === index ? (isXNext ? "X" : "O") : square.value,
+    }));
 
 		setSquares(newSquares);
-		console.log(`Clicked square ${index + 1}, placed ${playerChoice}`);
+		const estadoReal = verificarEstadoReal(newSquares);
+			if (estadoReal !== "hasgame") {
+				setGameOver(true);
+				return;
+			}
+
+		setIsXNext(!isXNext);
 
 		const estadoNumerico = formatTabuleiro(newSquares);
-		console.log("estaadonumerico", estadoNumerico);
 
 		verificarEstadoDoJogo(estadoNumerico).then((resultado) => {
 			setEstadoPrevisto(resultado);
-			console.log("Estado do jogo previsto:", resultado);
 		});
 	};
 
@@ -111,8 +169,17 @@ export default function ResponsiveGrid() {
 				.fill(null)
 				.map(() => ({ value: null }))
 		);
+		setIsXNext(true);
+		setGameOver(false);
+		setEstadoPrevisto(null);
+		setGameMetrics({
+			totalPredictions: 0,
+			correctPredictions: 0,
+			incorrectPredictions: 0,
+			accuracy: 0,
+		});
 	};
-
+	
 	return (
 		<Box display="flex" flexDirection="column" alignItems="center" gap="16px">
 			<Box display="flex" gap="16px" alignItems="center">
@@ -130,19 +197,6 @@ export default function ResponsiveGrid() {
 						<MenuItem value="svm">SVM</MenuItem>
 					</Select>
 				</FormControl>
-				<ToggleButtonGroup
-					value={playerChoice}
-					exclusive
-					onChange={handlePlayerChange}
-					aria-label="player choice"
-				>
-					<ToggleButton value="X" aria-label="X">
-						X
-					</ToggleButton>
-					<ToggleButton value="O" aria-label="O">
-						O
-					</ToggleButton>
-				</ToggleButtonGroup>
 				<Button
 					variant="contained"
 					onClick={handleRestart}
@@ -157,10 +211,31 @@ export default function ResponsiveGrid() {
 				</Button>
 			</Box>
 
-			{estadoPrevisto && (
-				<Box fontSize="24px" fontWeight="bold">
-					Estado do jogo: {estadoPrevisto.toUpperCase()}
-				</Box>
+			<Box display="flex" flexDirection="column" alignItems="center" gap="8px">
+				{estadoPrevisto && (
+					<Typography variant="h6" fontWeight="bold">
+						Estado do jogo: {estadoPrevisto.toUpperCase()}
+					</Typography>
+				)}
+				
+				<Typography variant="body1">
+					Total de Previsões: {gameMetrics.totalPredictions}
+				</Typography>
+				<Typography variant="body1">
+					Previsões Corretas: {gameMetrics.correctPredictions}
+				</Typography>
+				<Typography variant="body1">
+					Previsões Incorretas: {gameMetrics.incorrectPredictions}
+				</Typography>
+				<Typography variant="body1" fontWeight="bold">
+					Acurácia: {gameMetrics.accuracy.toFixed(2)}%
+				</Typography>
+			</Box>
+
+			{gameOver && (
+				<Typography variant="h6" color="error">
+					Jogo encerrado: A IA não detectou o fim do jogo corretamente!
+				</Typography>
 			)}
 
 			<Box

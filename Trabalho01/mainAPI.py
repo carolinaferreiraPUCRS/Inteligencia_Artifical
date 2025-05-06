@@ -52,3 +52,7 @@ def prever_estado_jogo(requisicao: RequisicaoEntrada):
         "algoritmo_utilizado": requisicao.algoritmo,
         "estado_previsto": predicao
     }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
